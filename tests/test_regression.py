@@ -447,6 +447,78 @@ tags: [测试]
         self.assertEqual(len(q_warnings), 0, f"意外产生题目数警告: {q_warnings}")
 
 
+# ------------------------------------------------------------------ B12: 跨平台 CRLF 换行符兼容
+class TestCRLFSupport(unittest.TestCase):
+    """B12：Windows 下 CRLF (\\r\\n) 换行符不应导致 Frontmatter 解析失败或未被保护。"""
+
+    def test_validate_note_crlf_frontmatter(self):
+        import validate_note
+        raw_crlf = "---\r\ntitle: 测试\r\ntags: [考研]\r\n---\r\n# 正文\r\n"
+        res = validate_note.validate_note(raw_crlf)
+        fm_errors = [e for e in res["errors"] if "Frontmatter" in e]
+        self.assertEqual(len(fm_errors), 0, "CRLF 换行导致 Frontmatter 报错")
+
+    def test_wikify_crlf_frontmatter_protection(self):
+        import wikify
+        raw_crlf = "---\r\ntitle: 测试\r\naliases: [二叉树]\r\n---\r\n# 标题\r\n\r\n这里出现二叉树概念。\r\n"
+        index = {
+            "notes": {"二叉树.md": {"stem": "二叉树", "rel_stem": "二叉树"}},
+            "name_index": {"二叉树": ["二叉树"]},
+            "alias_index": {"二叉树": "二叉树"}
+        }
+        terms = [{"term": "二叉树", "target": "二叉树.md"}]
+        final, audit = wikify.inject_document(raw_crlf, terms, index, {"weak_links": "footer"})
+        # frontmatter 内不应被注入链接
+        fm_part = final.split("---")[1]
+        self.assertNotIn("[[二叉树]]", fm_part)
+
+
+# ------------------------------------------------------------------ B13: parse_chunk_ids 边界健壮性
+class TestParseChunkIdsBoundary(unittest.TestCase):
+    """B13：分块解析支持逆序区间 (5-2) 以及异常字符串输入。"""
+
+    def test_parse_chunk_ids(self):
+        from extract import parse_chunk_ids
+        self.assertEqual(parse_chunk_ids("0,1,3"), [0, 1, 3])
+        self.assertEqual(parse_chunk_ids("0-3"), [0, 1, 2, 3])
+        self.assertEqual(parse_chunk_ids("3-1"), [1, 2, 3])
+        self.assertEqual(parse_chunk_ids("invalid, 2-4, foo"), [2, 3, 4])
+        self.assertIsNone(parse_chunk_ids(None))
+
+
+# ------------------------------------------------------------------ B14: parse_subtitle 口语纯数字保护
+class TestParseSubtitleDigits(unittest.TestCase):
+    """B14：SRT 中纯数字发言不应在时间戳之后被误当作下一段的序号行丢弃。"""
+
+    def test_spoken_digits_preserved(self):
+        from extract import parse_subtitle
+        srt_data = """1
+00:00:05,000 --> 00:00:08,000
+2024
+
+2
+00:00:09,000 --> 00:00:12,000
+数据结构
+"""
+        parsed = parse_subtitle(srt_data)
+        self.assertIsNotNone(parsed)
+        self.assertIn("2024", parsed)
+        self.assertIn("数据结构", parsed)
+
+
+# ------------------------------------------------------------------ B15: _ts_to_sec 异常输入防御
+class TestTsToSecBoundary(unittest.TestCase):
+    """B15：非法格式时间戳输入不应抛出未捕获异常。"""
+
+    def test_ts_to_sec_safe(self):
+        from validate_note import _ts_to_sec
+        self.assertEqual(_ts_to_sec("01:20"), 80)
+        self.assertEqual(_ts_to_sec("01:02:03"), 3723)
+        self.assertIsNone(_ts_to_sec("invalid"))
+        self.assertIsNone(_ts_to_sec("99:99"))
+        self.assertIsNone(_ts_to_sec(""))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

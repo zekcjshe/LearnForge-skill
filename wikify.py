@@ -66,17 +66,17 @@ STOPWORDS = {
 CJK = r"\u4e00-\u9fff"
 BOUND = rf"[{CJK}A-Za-z0-9_]"
 
-# 保护区正则（优先级：长匹配/外层块优先）
+# 保护区正则（优先级：长匹配/外层块优先，支持跨平台 CRLF/LF）
 PROTECTED_PATTERNS = [
-    (re.compile(r"\A---\n.*?\n---\n", re.DOTALL), "frontmatter"),
-    (re.compile(r"```[^\n]*\n.*?```", re.DOTALL), "codeblock"),
-    (re.compile(r"`[^`\n]+`"), "inlinecode"),
-    (re.compile(r"\[\[[^\]\n]+\]\]"), "wikilink"),
-    (re.compile(r"\[[^\]\n]+\]\([^\)\n]+\)"), "mdlink"),
+    (re.compile(r"\A---\r?\n.*?\r?\n---\r?\n", re.DOTALL), "frontmatter"),
+    (re.compile(r"```[^\r\n]*\r?\n.*?```", re.DOTALL), "codeblock"),
+    (re.compile(r"`[^`\r\n]+`"), "inlinecode"),
+    (re.compile(r"\[\[[^\]\r\n]+\]\]"), "wikilink"),
+    (re.compile(r"\[[^\]\r\n]+\]\([^\)\r\n]+\)"), "mdlink"),
     (re.compile(r"https?://\S+"), "url"),
     (re.compile(r"\$\$.*?\$\$", re.DOTALL), "math"),
-    (re.compile(r"\$[^$\n]+\$"), "mathinline"),
-    (re.compile(r"^#{1,6}\s+[^\n]+$", re.MULTILINE), "heading"),
+    (re.compile(r"\$[^$\r\n]+\$"), "mathinline"),
+    (re.compile(r"^#{1,6}\s+[^\r\n]+$", re.MULTILINE), "heading"),
 ]
 
 
@@ -122,7 +122,7 @@ def _parse_frontmatter(head: str) -> tuple[list[str], Optional[str]]:
     """从 frontmatter 提取 aliases 以及 title。"""
     aliases: list[str] = []
     title: Optional[str] = None
-    m = re.match(r"\A---\n(.*?)\n---\n", head, re.DOTALL)
+    m = re.match(r"\A---\r?\n(.*?)\r?\n---\r?\n", head, re.DOTALL)
     if not m:
         return aliases, title
     fm = m.group(1)
@@ -367,10 +367,11 @@ def inject_into_segment(
         else:
             continue
 
-        # 自链接防护：跳过指向当前笔记自身的链接（避免生成 [[本篇|术语]]）
+        # 自链接防护：跳过指向当前笔记自身的链接（避免生成 [[本篇|术语]]，兼容 Windows 反斜杠）
         if current_stem:
-            target_stem = target.rsplit("/", 1)[-1].replace(".md", "")
-            if target == current_stem or target_stem == current_stem or term == current_stem:
+            target_stem = target.replace("\\", "/").rsplit("/", 1)[-1].replace(".md", "")
+            current_stem_clean = current_stem.replace("\\", "/").rsplit("/", 1)[-1].replace(".md", "")
+            if target == current_stem or target_stem == current_stem_clean or term == current_stem_clean:
                 audit.setdefault("skipped_self_links", []).append({"term": term, "target": target})
                 continue
 
@@ -443,6 +444,7 @@ def inject_document(
     alias_index = index.get("alias_index", {})
     name_index = index.get("name_index", {})
     weak_mode = options.get("weak_links", "footer")
+    raw_md = raw_md.replace("\r\n", "\n")
 
     audit = {
         "terms_input": len(terms),

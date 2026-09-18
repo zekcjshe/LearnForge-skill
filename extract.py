@@ -580,7 +580,13 @@ def parse_subtitle(raw: str) -> Optional[str]:
     pending_time = None
     for line in stripped.splitlines():
         line = line.rstrip()
-        if not line or line.upper().startswith("WEBVTT") or line.isdigit():
+        if not line:
+            pending_time = None
+            continue
+        if line.upper().startswith("WEBVTT"):
+            continue
+        # SRT 序号行：仅当处于新段落开头（pending_time 为 None）且为纯数字时跳过
+        if pending_time is None and line.isdigit():
             continue
         m = re.match(r"(?:(\d{1,2}):)?(\d{2}:\d{2})[.,](\d{1,3})\s*-->", line)
         if m:
@@ -1065,7 +1071,7 @@ CODE_INDICATOR_PATTERN = re.compile(
 
 
 def parse_chunk_ids(chunks_str: Optional[str]) -> Optional[list[int]]:
-    """解析分块列表字符串，支持逗号分隔与区间，如 '0,1,3' 或 '0-3'。"""
+    """解析分块列表字符串，支持逗号分隔与区间（如 '0,1,3' 或 '0-3'），兼容逆序与异常输入。"""
     if not chunks_str:
         return None
     ids = set()
@@ -1073,11 +1079,21 @@ def parse_chunk_ids(chunks_str: Optional[str]) -> Optional[list[int]]:
         part = part.strip()
         if not part:
             continue
-        if "-" in part:
-            start_s, end_s = part.split("-", 1)
-            ids.update(range(int(start_s.strip()), int(end_s.strip()) + 1))
-        else:
-            ids.add(int(part))
+        try:
+            if "-" in part:
+                start_s, end_s = part.split("-", 1)
+                s_val = int(start_s.strip())
+                e_val = int(end_s.strip())
+                low = min(s_val, e_val)
+                high = max(s_val, e_val)
+                if low >= 0:
+                    ids.update(range(low, high + 1))
+            else:
+                val = int(part)
+                if val >= 0:
+                    ids.add(val)
+        except ValueError:
+            print(f"[warning] 忽略无法解析的分块序号: {part}", file=sys.stderr)
     return sorted(list(ids))
 
 

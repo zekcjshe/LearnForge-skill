@@ -122,17 +122,20 @@ MAX_ANCHOR_CHARS = 50
 
 
 def _ts_to_sec(ts: str) -> int | None:
-    parts = [int(x) for x in ts.split(':')]
-    if len(parts) == 2:
-        mm, ss = parts
-        if ss >= 60:
-            return None
-        return mm * 60 + ss
-    if len(parts) == 3:
-        hh, mm, ss = parts
-        if mm >= 60 or ss >= 60:
-            return None
-        return hh * 3600 + mm * 60 + ss
+    try:
+        parts = [int(x) for x in ts.split(':')]
+        if len(parts) == 2:
+            mm, ss = parts
+            if ss >= 60:
+                return None
+            return mm * 60 + ss
+        if len(parts) == 3:
+            hh, mm, ss = parts
+            if mm >= 60 or ss >= 60:
+                return None
+            return hh * 3600 + mm * 60 + ss
+    except Exception:
+        return None
     return None
 
 
@@ -227,13 +230,18 @@ def validate_note(content: str, vault_root: Path | None = None, archive_text: st
     errors: list[str] = []
     warnings: list[str] = []
 
+    # 规范化换行符（CRLF -> LF），确保跨平台校验一致性
+    content = content.replace("\r\n", "\n")
+    if archive_text:
+        archive_text = archive_text.replace("\r\n", "\n")
+
     # 1. 结构与格式完整性检查
-    has_frontmatter = bool(re.match(r"\A---\n.*?\n---\n", content, re.DOTALL))
+    has_frontmatter = bool(re.match(r"\A---\r?\n.*?\r?\n---\r?\n", content, re.DOTALL))
     if not has_frontmatter:
         errors.append("缺失 Frontmatter 元数据区 (---...---)")
 
-    # 检查未闭合的代码块
-    backtick_count = len(re.findall(r"^```", content, re.MULTILINE))
+    # 检查未闭合的代码块（支持缩进代码块）
+    backtick_count = len(re.findall(r"^\s*```", content, re.MULTILINE))
     if backtick_count % 2 != 0:
         errors.append(f"存在未闭合的 Markdown 代码块（``` 标记出现 {backtick_count} 次，不成对）")
 
@@ -334,7 +342,7 @@ def validate_note(content: str, vault_root: Path | None = None, archive_text: st
             try:
                 with open(p, "r", encoding="utf-8", errors="ignore") as fh:
                     head = fh.read(2000)
-                m = re.match(r"\A---\n(.*?)\n---\n", head, re.DOTALL)
+                m = re.match(r"\A---\r?\n(.*?)\r?\n---\r?\n", head, re.DOTALL)
                 if m:
                     fm = m.group(1)
                     tm = re.search(r"^title\s*:\s*[\"']?([^\"'\n]+)[\"']?", fm, re.MULTILINE)
@@ -446,7 +454,19 @@ def main() -> int:
         if not archive_path.exists():
             print(f"[error] archive 文件不存在: {archive_path}", file=sys.stderr)
             return 2
-        archive_text = archive_path.read_text(encoding="utf-8", errors="ignore")
+        raw_archive = archive_path.read_text(encoding="utf-8", errors="ignore")
+        if archive_path.suffix.lower() == ".json":
+            try:
+                data = json.loads(raw_archive)
+                if isinstance(data, dict):
+                    parts = [data.get("content", ""), data.get("content_dehydrated", ""), data.get("content_plain", "")]
+                    archive_text = "\n".join(p for p in parts if p)
+                else:
+                    archive_text = raw_archive
+            except Exception:
+                archive_text = raw_archive
+        else:
+            archive_text = raw_archive
 
     res = validate_note(content, vault_root=vault_root, archive_text=archive_text)
 
