@@ -379,5 +379,75 @@ class TestWikifySelfLinkProtection(unittest.TestCase):
         self.assertTrue(len(audit.get("skipped_self_links", [])) > 0)
 
 
+# ------------------------------------------------------------------ B10: 多P分P视频解析
+class TestExtractMultiPResolution(unittest.TestCase):
+    """B10：extract.py 遇到 B 站多 P 视频 URL 时，正确提取分 P 编号，杜绝多 P 缓存碰撞覆盖。"""
+
+    def test_resolve_video_id_multi_p(self):
+        from extract import resolve_video_id
+        # 标准 ?p=43
+        self.assertEqual(resolve_video_id("https://www.bilibili.com/video/BV1b7411N798?p=43"), "BV1b7411N798_p43")
+        # 带其它参数 &p=43
+        self.assertEqual(resolve_video_id("https://www.bilibili.com/video/BV1b7411N798/?spm_id_from=333&p=43"), "BV1b7411N798_p43")
+        # 简写 BV1b7411N798_p43
+        self.assertEqual(resolve_video_id("BV1b7411N798_p43"), "BV1b7411N798_p43")
+        # 单 P 保持不变
+        self.assertEqual(resolve_video_id("https://www.bilibili.com/video/BV1b7411N798"), "BV1b7411N798")
+        self.assertEqual(resolve_video_id("BV1b7411N798"), "BV1b7411N798")
+
+
+# ------------------------------------------------------------------ B11: 提示语行内 details 防误吞
+class TestValidateNoteInlineDetailsFix(unittest.TestCase):
+    """B11：自测说明提示语中的 `<details>` 行内代码不应被误判为未闭合 HTML 标签而吞掉第 1 题。"""
+
+    def test_inline_details_in_tip_preserves_q1(self):
+        import validate_note
+        raw = """---
+title: "测试"
+tags: [测试]
+---
+# 标题
+🎯 **全篇通关目标**：测试
+
+## 模块一：测试
+🎯 学完你能：掌握测试
+
+[> 🎥 来源原片：测试 [01:00]]
+
+## 模块二：🧪 闭环主动自测
+> [!TIP]
+> 点击 `<details>` 展开查看答案。
+
+### 1. 第一题
+题目内容
+<details>
+<summary>答案</summary>
+1. 解析步骤一
+2. 解析步骤二
+</details>
+
+### 2. 第二题
+题目内容
+<details>
+<summary>答案</summary>
+解析
+</details>
+
+### 3. 第三题
+题目内容
+<details>
+<summary>答案</summary>
+解析
+</details>
+"""
+        res = validate_note.validate_note(raw)
+        warnings = res["warnings"]
+        # 不应报警 "闭环自测题不足 3 道"
+        q_warnings = [w for w in warnings if "闭环自测题不足" in w]
+        self.assertEqual(len(q_warnings), 0, f"意外产生题目数警告: {q_warnings}")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+

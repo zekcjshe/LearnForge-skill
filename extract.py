@@ -303,11 +303,15 @@ def _audio_is_decodable(path: Path) -> bool:
 
 
 def resolve_video_id(source: str, video_id: Optional[str] = None) -> str:
-    """从源提取消毒后的 video_id，严格防止路径穿越。"""
+    """从源提取消毒后的 video_id，严格防止路径穿越。支持提取 B 站分P (?p=N, _pN)。"""
     if video_id:
         return re.sub(r"[^\w\-_]", "_", Path(video_id).name)
     m_bv = re.search(r"(BV[a-zA-Z0-9]+)", source)
     if m_bv:
+        m_p = re.search(r"[?&]p=(\d+)|_(?:p|P)(\d+)", source)
+        if m_p:
+            p_num = m_p.group(1) or m_p.group(2)
+            return f"{m_bv.group(1)}_p{p_num}"
         return m_bv.group(1)
     m_yt = re.search(r"(?:v=|youtu\.be/)([a-zA-Z0-9_-]{11})", source)
     if m_yt:
@@ -650,7 +654,11 @@ def fetch_metadata(source: str, platform: str, video_id: str) -> dict:
     import yt_dlp
     url = source
     if platform == "bilibili" and not (source.startswith("http://") or source.startswith("https://")):
-        url = f"https://www.bilibili.com/video/{source}"
+        m_part = re.match(r"^(BV[a-zA-Z0-9]+)[_?&](?:p|P)?(\d+)$", source)
+        if m_part:
+            url = f"https://www.bilibili.com/video/{m_part.group(1)}?p={m_part.group(2)}"
+        else:
+            url = f"https://www.bilibili.com/video/{source}"
 
     opts = {
         "skip_download": True,
@@ -658,6 +666,8 @@ def fetch_metadata(source: str, platform: str, video_id: str) -> dict:
         "no_warnings": True,
         "socket_timeout": 20,
     }
+    if platform == "bilibili":
+        opts["proxy"] = ""
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -688,7 +698,11 @@ def download_audio(source: str, platform: str, dest: Path) -> dict:
 
     url = source
     if platform == "bilibili" and not (source.startswith("http://") or source.startswith("https://")):
-        url = f"https://www.bilibili.com/video/{source}"
+        m_part = re.match(r"^(BV[a-zA-Z0-9]+)[_?&](?:p|P)?(\d+)$", source)
+        if m_part:
+            url = f"https://www.bilibili.com/video/{m_part.group(1)}?p={m_part.group(2)}"
+        else:
+            url = f"https://www.bilibili.com/video/{source}"
 
     opts = {
         "format": "bestaudio[ext=m4a]/bestaudio/best",
@@ -701,6 +715,8 @@ def download_audio(source: str, platform: str, dest: Path) -> dict:
         "noplaylist": True,
         "postprocessors": [],
     }
+    if platform == "bilibili":
+        opts["proxy"] = ""
 
     dest.parent.mkdir(parents=True, exist_ok=True)
 

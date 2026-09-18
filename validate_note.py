@@ -267,8 +267,10 @@ def validate_note(content: str, vault_root: Path | None = None, archive_text: st
     has_active_recall = bool(recall_match)
     recall_text = recall_match.group(1) if recall_match else ""
 
-    # ① 先剥离 <details> 答案体，避免答案解析内部的编号列表被计成新的题目
-    _q_body = re.sub(r"<details>[\s\S]*?</details>", "", recall_text, flags=re.IGNORECASE)
+    # ① 先剥离代码块和行内代码，防止正文/提示框中说明用的 `<details>` 等标记被误当作 HTML 开标签
+    _clean_text = re.sub(r"(?s)```.*?```|`[^`\n]+`", "", recall_text)
+    # ② 剥离 <details> 答案体，避免答案解析内部的编号列表被计成新的题目
+    _q_body = re.sub(r"<details(?:\s+[^>]*)?>[\s\S]*?</details>", "", _clean_text, flags=re.IGNORECASE)
 
     # ② 题目正则增加可选的标题前缀 —— 兼容 SKILL.md 规定的 "### 1. xxx" 写法
     Q_PATTERN = re.compile(
