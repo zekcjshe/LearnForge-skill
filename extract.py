@@ -541,7 +541,9 @@ def pick_subtitle(info: dict, prefer_lang: Optional[str] = None) -> Optional[tup
                     if lang.lower().startswith(pref):
                         candidates.append((lang, source[lang], is_auto))
             if candidates:
-                candidates.sort(key=lambda x: (not x[2], len(x[0])), reverse=True)
+                # 排序规则：人工轨道(is_auto=False=0)优先于自动轨道(is_auto=True=1)，
+                # 同类中标签越长越具体（如 en-US > en）优先。
+                candidates.sort(key=lambda x: (x[2], -len(x[0])))
                 return candidates[0]
 
     # 默认兜底：按简体中文优先匹配
@@ -896,26 +898,45 @@ def _is_oom_or_cuda(exc: BaseException) -> bool:
     return bool(_CUDA_MSG_PATTERN.search(msg))
 
 
-def detect_language(model, model_ref: str, wav: Path, run_dir: Path, vad: bool = True) -> tuple[str, any]:
-    """前 30s 裸探测语言（不注入特定语言提示词，避免对英文/非中文产生偏置），尊重用户 vad 设置。"""
-    probe = run_dir / "_probe.wav"
-    slice_wav(wav, 0.0, 30.0, probe)
-    try:
-        _, info = model.transcribe(str(probe), language=None, vad_filter=vad)
-    except Exception as exc:
-        if _is_oom_or_cuda(exc):
-            print(f"[model] ⚠️ 语言探测触发 CUDA 错误，回退至 CPU int8...", file=sys.stderr)
-            from faster_whisper import WhisperModel
-            model = WhisperModel(model_ref, device="cpu", compute_type="int8")
+def detect_language(model, model_ref: str, wav: Path, run_dir: Path, vad: bool = True,
+                    duration: float = 0.0) -> tuple[str, any]:
+    """前 30s 裸探测语言（不注入特定语言提示词，避免对英文/非中文产生偏置），尊重用户 vad 设置。
+    若首次探测置信度 < 0.6（常见于 B 站讲课视频有 30s 静音片头），自动从视频 1/4 处重试一次。
+    """
+    def _probe_at(t0: float) -> tuple[str, any, float]:
+        """在 t0 处截 30s 探测，返回 (language, model, probability)。"""
+        nonlocal model
+        probe = run_dir / "_probe.wav"
+        slice_wav(wav, t0, t0 + 30.0, probe)
+        try:
             _, info = model.transcribe(str(probe), language=None, vad_filter=vad)
-        else:
-            raise
-    finally:
-        probe.unlink(missing_ok=True)
-    print(f"[lang] 检测语言: {info.language} (置信度 {info.language_probability:.2f})", file=sys.stderr)
-    if info.language_probability < 0.6:
-        print(f"[lang] ⚠️ 语言置信度偏低，若转录异常可用 --language 显式指定", file=sys.stderr)
-    return info.language, model
+        except Exception as exc:
+            if _is_oom_or_cuda(exc):
+                print(f"[model] ⚠️ 语言探测触发 CUDA 错误，回退至 CPU int8...", file=sys.stderr)
+                from faster_whisper import WhisperModel
+                model = WhisperModel(model_ref, device="cpu", compute_type="int8")
+                _, info = model.transcribe(str(probe), language=None, vad_filter=vad)
+            else:
+                raise
+        finally:
+            probe.unlink(missing_ok=True)
+        return info.language, model, info.language_probability
+
+    lang, model, prob = _probe_at(0.0)
+    print(f"[lang] 检测语言: {lang} (置信度 {prob:.2f})", file=sys.stderr)
+
+    # 首次置信度偏低且视频时长足够 → 跳过静音片头，在 1/4 处重试
+    if prob < 0.6 and duration > 120.0:
+        retry_t0 = max(30.0, duration / 4)
+        print(f"[lang] ⚠️ 置信度偏低，在 {retry_t0:.0f}s 处重试...", file=sys.stderr)
+        lang2, model, prob2 = _probe_at(retry_t0)
+        print(f"[lang] 重试结果: {lang2} (置信度 {prob2:.2f})", file=sys.stderr)
+        if prob2 > prob:
+            lang, prob = lang2, prob2
+
+    if prob < 0.6:
+        print(f"[lang] ⚠️ 语言置信度仍偏低，若转录异常可用 --language 显式指定", file=sys.stderr)
+    return lang, model
 
 
 def transcribe_chunk(model, model_ref: str, wav: Path, c: dict, args, language: str, run_dir: Path) -> tuple[list[dict], any]:
@@ -1810,7 +1831,7 @@ def main() -> int:
 
         language = None if args.language in ("auto", "none") else args.language
         if language is None:
-            language, model = detect_language(model, model_ref, wav, run_dir, vad=args.vad)
+            language, model = detect_language(model, model_ref, wav, run_dir, vad=args.vad, duration=duration)
 
         if selected_chunk_ids is not None:
             target_chunks = [c for c in manifest["chunks"] if c["id"] in selected_chunk_ids]

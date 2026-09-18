@@ -519,6 +519,62 @@ class TestTsToSecBoundary(unittest.TestCase):
         self.assertIsNone(_ts_to_sec(""))
 
 
+
+
+# ------------------------------------------------------------------ B16: pick_subtitle sort direction
+class TestPickSubtitleSortDirection(unittest.TestCase):
+    """B16：非中文前缀匹配时，人工字幕(manual)应优先于自动字幕(auto)。"""
+
+    def _make_info(self, manual_langs, auto_langs):
+        return {
+            "subtitles": {lang: [{"ext": "json3", "url": "http://m"}] for lang in manual_langs},
+            "automatic_captions": {lang: [{"ext": "json3", "url": "http://a"}] for lang in auto_langs},
+        }
+
+    def test_manual_preferred_over_auto(self):
+        from extract import pick_subtitle
+        # 同时有 manual en 和 auto en-orig
+        info = self._make_info(["en"], ["en-orig"])
+        result = pick_subtitle(info, prefer_lang="en")
+        self.assertIsNotNone(result)
+        lang, _entry, is_auto = result
+        self.assertFalse(is_auto, f"期望 manual(is_auto=False)，实得 lang={lang} is_auto={is_auto}")
+
+    def test_auto_fallback_when_no_manual(self):
+        from extract import pick_subtitle
+        info = self._make_info([], ["en-orig", "en"])
+        result = pick_subtitle(info, prefer_lang="en")
+        self.assertIsNotNone(result)
+        _lang, _entry, is_auto = result
+        self.assertTrue(is_auto, "无 manual 时应回落到 auto")
+
+    def test_longer_specific_tag_preferred(self):
+        from extract import pick_subtitle
+        # 两个 manual: en-GB 和 en-US，无精确匹配 'en'，均为前缀匹配。
+        # en-US 与 en-GB 等长，取第一个（排序稳定）；关键是两者都是 manual(is_auto=False)。
+        info = self._make_info(["en-GB", "en-US"], ["en"])
+        result = pick_subtitle(info, prefer_lang="en")
+        self.assertIsNotNone(result)
+        lang, _entry, is_auto = result
+        # 精确匹配 'en' 在 manual 里找不到（只有 en-GB/en-US），
+        # 但 auto['en'] 存在且精确 → 应先走精确匹配返回 auto，
+        # 而非进入前缀排序路径。这里验证精确匹配优先于前缀匹配。
+        self.assertEqual(lang, "en", "精确匹配的 auto['en'] 应优先于非精确的 manual['en-GB']/'en-US'")
+        self.assertTrue(is_auto)
+
+
+# ------------------------------------------------------------------ B17: detect_language fallback duration param
+class TestDetectLanguageDurationParam(unittest.TestCase):
+    """B17：detect_language 接收 duration 参数（向后兼容，默认 0 不触发重试）。"""
+
+    def test_signature_accepts_duration(self):
+        import inspect
+        from extract import detect_language
+        sig = inspect.signature(detect_language)
+        self.assertIn("duration", sig.parameters, "detect_language 应接受 duration 参数")
+        self.assertEqual(sig.parameters["duration"].default, 0.0)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 
