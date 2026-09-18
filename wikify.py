@@ -271,8 +271,8 @@ def is_valid_term(term: str) -> bool:
         return False
     if term in STOPWORDS or term.lower() in STOPWORDS:
         return False
-    # 过滤纯标点、异常字符，保留中英文、数字、连字符、点和下划线
-    if not re.match(r"^[\w\u4e00-\u9fff\-\./\+]+$", term):
+    # 过滤纯标点、异常字符，保留中英文、数字、连字符、点、下划线与词间空格
+    if not re.match(r"^[\w\u4e00-\u9fff\-\./\+]+(?:\s+[\w\u4e00-\u9fff\-\./\+]+)*$", term.strip()):
         return False
     return True
 
@@ -331,8 +331,9 @@ def inject_into_segment(
     linked: set,
     weak_mode: str,
     audit: dict,
+    current_stem: Optional[str] = None,
 ) -> str:
-    """在非保护正文段中执行长术语优先的首次链接注入，支持 LLM target 强校验与歧义不乱链。"""
+    """在非保护正文段中执行长术语优先的首次链接注入，支持 LLM target 强校验、歧义不乱链与自链接防护。"""
     curr_segments: list[tuple[str, str]] = [("text", text)]
 
     for t in terms:
@@ -365,6 +366,13 @@ def inject_into_segment(
             target = term
         else:
             continue
+
+        # 自链接防护：跳过指向当前笔记自身的链接（避免生成 [[本篇|术语]]）
+        if current_stem:
+            target_stem = target.rsplit("/", 1)[-1].replace(".md", "")
+            if target == current_stem or target_stem == current_stem or term == current_stem:
+                audit.setdefault("skipped_self_links", []).append({"term": term, "target": target})
+                continue
 
         pat = build_term_pattern(term)
         new_segments = []
@@ -459,12 +467,18 @@ def inject_document(
     # 关键：按字符长度降序排序，确保「动态规划」优先于「动态」被匹配
     valid.sort(key=lambda t: -len(t["term"]))
 
+    current_stem = options.get("current_stem")
+    if not current_stem and options.get("input"):
+        current_stem = Path(options["input"]).stem
+
     linked: set = set()
     segments = split_protected(raw_md)
     parts = []
     for kind, chunk in segments:
         if kind == "text":
-            chunk = inject_into_segment(chunk, valid, name_index, index, linked, weak_mode, audit)
+            chunk = inject_into_segment(
+                chunk, valid, name_index, index, linked, weak_mode, audit, current_stem=current_stem
+            )
         parts.append(chunk)
     final = "".join(parts)
 
@@ -478,6 +492,8 @@ def inject_document(
         for t in valid:
             term = t["term"]
             if term in alias_index or term in linked:
+                continue
+            if current_stem and term == current_stem:
                 continue
             if t.get("type") not in CONCEPT_TYPES:
                 continue
@@ -546,7 +562,10 @@ def cmd_inject(args, index: Optional[dict] = None) -> int:
         return 2
 
     md = in_path.read_text(encoding="utf-8")
-    final, audit = inject_document(md, terms, index, {"weak_links": args.weak_links})
+    current_note = getattr(args, "current_note", None) or in_path.stem
+    final, audit = inject_document(
+        md, terms, index, {"weak_links": args.weak_links, "input": str(in_path), "current_stem": current_note}
+    )
 
     if args.inplace:
         out_path = in_path
@@ -564,6 +583,7 @@ def cmd_inject(args, index: Optional[dict] = None) -> int:
         "output": str(out_path),
         "index_notes": len(index.get("notes", {})),
         "weak_links_mode": args.weak_links,
+        "current_note": current_note,
     })
     if args.audit:
         a_path = Path(args.audit)
@@ -571,10 +591,11 @@ def cmd_inject(args, index: Optional[dict] = None) -> int:
         a_path.write_text(json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8")
 
     amb_msg = f" | 歧义消歧: {len(audit['ambiguous_terms'])}" if audit["ambiguous_terms"] else ""
+    self_msg = f" | 自链防护: {len(audit.get('skipped_self_links', []))}" if audit.get("skipped_self_links") else ""
     print(
         f"[inject] 强链: {audit['strong_links']} | 弱链正文: {audit['weak_links']} | "
         f"弱链文末: {audit['weak_footer']} | 无效术语: {audit['skipped_invalid']} | "
-        f"正文未现: {audit['skipped_not_in_text']}{amb_msg}",
+        f"正文未现: {audit['skipped_not_in_text']}{amb_msg}{self_msg}",
         file=sys.stderr,
     )
     return 0
@@ -613,6 +634,7 @@ def main() -> int:
     p_inject.add_argument("--index", default=str(DEFAULT_INDEX), help="索引文件路径")
     p_inject.add_argument("--audit", default=None, help="审计结果 JSON 输出路径")
     p_inject.add_argument("--weak-links", choices=["body", "footer", "none"], default="footer")
+    p_inject.add_argument("--current-note", default=None, help="当前笔记名称/词干（用于自链接防护，默认自动推导）")
     p_inject.add_argument("--inplace", action="store_true", help="原地修改输入文件")
 
     p_all = sub.add_parser("all", help="一步到位：扫描 Vault 并注入")
@@ -623,6 +645,7 @@ def main() -> int:
     p_all.add_argument("--index", default=str(DEFAULT_INDEX))
     p_all.add_argument("--audit", default=None)
     p_all.add_argument("--weak-links", choices=["body", "footer", "none"], default="footer")
+    p_all.add_argument("--current-note", default=None, help="当前笔记名称/词干（用于自链接防护，默认自动推导）")
     p_all.add_argument("--inplace", action="store_true")
 
     args = ap.parse_args()

@@ -273,5 +273,111 @@ class TestProtectedSpansAndCleanFooter(unittest.TestCase):
         self.assertNotIn("## 🔗 关联概念", final)
 
 
+# ------------------------------------------------------------------ B8: 跨段引文与自测题解析隔离
+class TestCrossSegmentAndRecallEdgeCases(unittest.TestCase):
+    """B8：跨段引文（去噪时剥离时间戳）与自测题 <details> 解析内部编号隔离。"""
+
+    def test_quote_spanning_two_asr_segments_passes(self):
+        """跨段引文（Whisper 常把一句话切成两段）必须通过溯源校验。"""
+        archive_text = (
+            "[00:07:47] 我一直觉得这个算法的读音\n"
+            "[00:07:49] 要比这个算法的执行要难多了\n"
+        )
+        quote = "我一直觉得这个算法的读音要比这个算法的执行要难多了"
+        note = make_note([(quote, "07:47 - 07:51", "UP主")])
+        res = validate_note.check_anchors(note, archive_text)
+        self.assertEqual(res["blocking"], [], f"跨段引文被误判为编造: {res['blocking']}")
+
+    def test_numbered_list_inside_details_is_not_a_question(self):
+        """答案体 <details> 内的编号列表不能被计成题目。"""
+        recall_text = (
+            "## 闭环自测练习 📝\n\n"
+            "1. 什么是拥塞控制？\n"
+            "<details>\n"
+            "<summary>答案与步骤解析</summary>\n"
+            "1. 第一阶段：慢开始指数增长。\n"
+            "2. 第二阶段：到达 ssthresh 后转为拥塞避免。\n"
+            "3. 第三阶段：超时或收到 3 个 Dup ACK。\n"
+            "</details>\n\n"
+            "2. AIMD 的本质是什么？\n"
+            "<details>\n<summary>答案</summary>\n加法增大乘法减小。\n</details>\n\n"
+            "3. 快恢复如何工作？\n"
+            "<details>\n<summary>答案</summary>\n仅将 cwnd 减半并线性探测。\n</details>\n"
+        )
+        note_content = (
+            f"---\ntitle: test\n---\n# T\n> 🎯 **全篇通关目标**：掌握\n"
+            f"> [00:10] [🎥 原片] 讲师说明\n\n"
+            f"{recall_text}"
+        )
+        res = validate_note.validate_note(note_content)
+        self.assertEqual(res["metrics"]["questions_count"], 3,
+                         f"答案体内部的编号列表被误计为题目: {res['metrics']['questions_count']}")
+        self.assertFalse(any("未配对" in w for w in res["warnings"]))
+
+    def test_heading_style_questions_detected(self):
+        """支持 SKILL.md 规定的标题式题目 '### 1. 题目名'。"""
+        recall_text = (
+            "## 闭环自测练习 📝\n\n"
+            "### 1. 慢开始门限的作用？\n"
+            "<details><summary>解析</summary>区分指数与线性增长阶段。</details>\n\n"
+            "### 2. 为什么是 3 个 Dup ACK？\n"
+            "<details><summary>解析</summary>概率论判定网络并未彻底拥塞瘫痪。</details>\n\n"
+            "### 3. Tahoe 与 Reno 的差异？\n"
+            "<details><summary>解析</summary>Tahoe 归零，Reno 快恢复减半。</details>\n"
+        )
+        note_content = (
+            f"---\ntitle: test\n---\n# T\n> 🎯 **全篇通关目标**：掌握\n"
+            f"> [00:10] [🎥 原片] 讲师说明\n\n"
+            f"{recall_text}"
+        )
+        res = validate_note.validate_note(note_content)
+        self.assertEqual(res["metrics"]["questions_count"], 3,
+                         f"标题式题目未能正确识别: {res['metrics']['questions_count']}")
+        self.assertEqual(res["metrics"]["answers_count"], 3)
+
+    def test_anchor_audit_template_generation_and_validation(self):
+        """测试自动生成 anchor_audit.json 骨架并能顺利通过 schema 规范校验。"""
+        note = make_note([("整条马路都堵死了收费站必须限流", "03:10 - 03:20", "UP主")])
+        template = validate_note.generate_anchor_audit_template(note, video_id="BV1test", source_title="TCP")
+        self.assertEqual(len(template["candidates"]), 1)
+        self.assertEqual(template["candidates"][0]["quote"], "整条马路都堵死了收费站必须限流")
+        with tempfile.NamedTemporaryFile("w+", encoding="utf-8", suffix=".json", delete=False) as tf:
+            json.dump(template, tf, ensure_ascii=False)
+            tmp_name = tf.name
+        try:
+            issues = validate_note.check_anchor_audit(Path(tmp_name))
+            self.assertEqual(issues, [], f"生成的模板未通过合规校验: {issues}")
+        finally:
+            os.remove(tmp_name)
+
+
+# ------------------------------------------------------------------ B9: 自链接保护
+class TestWikifySelfLinkProtection(unittest.TestCase):
+    """B9：wikify 对指向当前笔记自身的术语实施防护，杜绝无意义自链。"""
+
+    def test_wikify_skips_self_links(self):
+        import wikify
+        index = {
+            "notes": {
+                "计算机网络/TCP 拥塞控制.md": {"stem": "TCP 拥塞控制", "rel_stem": "计算机网络/TCP 拥塞控制"}
+            },
+            "name_index": {"TCP 拥塞控制": ["计算机网络/TCP 拥塞控制"]},
+            "alias_index": {"TCP 拥塞控制": "计算机网络/TCP 拥塞控制"}
+        }
+        terms = [
+            {"term": "TCP 拥塞控制", "target": "计算机网络/TCP 拥塞控制.md"},
+            {"term": "慢开始", "type": "concept"}
+        ]
+        raw_md = "# TCP 拥塞控制\n\n在 TCP 拥塞控制 中，慢开始是初始阶段。"
+        final, audit = wikify.inject_document(
+            raw_md, terms, index,
+            {"weak_links": "footer", "current_stem": "TCP 拥塞控制"}
+        )
+        # 正文中不应该有指向自身的链接
+        self.assertNotIn("[[计算机网络/TCP 拥塞控制|TCP 拥塞控制]]", final)
+        self.assertNotIn("[[TCP 拥塞控制]]", final)
+        self.assertTrue(len(audit.get("skipped_self_links", [])) > 0)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

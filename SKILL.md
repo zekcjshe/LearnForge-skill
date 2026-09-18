@@ -32,7 +32,7 @@ Teaching Anchor 是保留“原讲师怎么讲这个知识”的短摘录，不�
   > "<短摘录，≤50 字>"
   > —— [mm:ss - mm:ss]
   ```
-- **旁路生成审计资产**：按 `anchor_audit.schema.json` 约束旁路生成 `anchor_audit.json`（不进入最终 Markdown，仅用于工程回归与审计）。
+- **旁路生成审计资产**：按 `anchor_audit.schema.json` 约束旁路生成 `anchor_audit.json`（可通过 `python validate_note.py <note> --generate-audit <video_id>` 自动导出骨架模板，不进入最终 Markdown，用于工程回归与审计）。
 
 ---
 
@@ -68,7 +68,7 @@ integration_strategy:
    #    索引不存在而 exit 2。此处使用 --weak-links none 保持正文纯净，避免在文末产生多余弱链/歧义页脚。
    python "<skills-dir>/video2obsidian/wikify.py" all --vault "<vault-dir>" --terms "terms.json" --input "note.md" --output "note_final.md" --weak-links none
    # 2. 确定性质量审计（Active Recall 检验、代码与 Mermaid 检查、Wikilink 真实性、Anchor 机械与原文溯源检查）
-   python "<skills-dir>/video2obsidian/validate_note.py" "note_final.md" --vault "<vault-dir>" --archive "<archive-path>"
+   python "<skills-dir>/video2obsidian/validate_note.py" "note_final.md" --vault "<vault-dir>" --archive "<archive-path>" --audit "<audit-json-path>"
    ```
 
 ---
@@ -78,7 +78,9 @@ integration_strategy:
 1. **自适应学习规划 (Learning Plan)**：
    - 参考 [`core/learning_plan_schema.md`](core/learning_plan_schema.md) 与 [`profiles/exemplars/`](profiles/exemplars/) 认知范例，动态生成 `Learning Plan`：指定 `primary_exemplar` 与 `secondary_exemplars`，定义嵌入式融合策略与必掌握清单 (`must_cover`)。
 2. **缺口驱动多源取证 (Bilibili-First Discovery)**：
-   - 调用 `bilibili` MCP 优先检索互补高赞视频，通过 `--chunk-index` 查看技术指纹，仅提取匹配章节的 L1.5 证据。
+   - **优先路由**：环境已加载 `bilibili` MCP 时，调用 MCP 工具（`bilibili-search-summary`、`bilibili-video-detail`）检索高赞互补视频；
+   - **降级路径（无 bilibili MCP 时）**：若当前环境未配置 bilibili MCP，Agent 自动提示用户提供 1~2 个相关 B 站/视频 URL，或使用内置 Web 搜索（如搜索 `site:bilibili.com <Topic>`）锁定信源；
+   - 通过 `extract.py <url> --chunk-index` 查看技术指纹，仅对命中 `must_cover` 考点的章节提取 L1.5 证据。
 3. **横向综合重构 (Learning Launchpad)**：
    - 提取 Teaching Anchor 候选，执行 Q1/Q2/Q3 淘汰并产出 `anchor_audit.json`；
    - 遵循六段式 Learning Launchpad 结构编写综合主题笔记。

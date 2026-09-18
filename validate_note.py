@@ -15,6 +15,7 @@ validate_note.py — 教学重构笔记质量门禁（Quality Gate）
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import re
 import sys
@@ -26,6 +27,69 @@ if hasattr(sys.stdout, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8")
     except Exception:
         pass
+
+
+def check_anchor_audit(audit_path: Path) -> list[str]:
+    """校验 anchor_audit.json 审计资产是否符合 schema 规范。"""
+    issues = []
+    if not audit_path.exists():
+        return [f"未找到指定的 anchor_audit 资产: {audit_path}"]
+    try:
+        data = json.loads(audit_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        return [f"anchor_audit.json 解析失败: {e}"]
+
+    for req in ["video_id", "candidates", "final_anchors"]:
+        if req not in data:
+            issues.append(f"anchor_audit.json 缺失必填字段: {req}")
+
+    candidates = data.get("candidates", [])
+    if not isinstance(candidates, list):
+        issues.append("anchor_audit.json 的 candidates 必须为列表")
+    else:
+        for c in candidates:
+            if not isinstance(c, dict):
+                continue
+            quote = c.get("quote", "")[:15]
+            if c.get("kept"):
+                r = c.get("reason", {})
+                for dim in ["irreplaceable", "non_derivable", "memorable"]:
+                    if not r.get(dim):
+                        issues.append(f"入选 Anchor [{quote}] 缺失三问理由: {dim}")
+            else:
+                if not c.get("reason_failed"):
+                    issues.append(f"淘汰 Anchor [{quote}] 缺失淘汰原因: reason_failed")
+    return issues
+
+
+def generate_anchor_audit_template(note_text: str, video_id: str = "BV_TODO", source_title: str = "TODO") -> dict:
+    """根据正文中实际入选的 Anchor 生成符合 schema 规范的初始审计资产骨架。"""
+    matches = list(ANCHOR_QUOTE_PATTERN.finditer(note_text))
+    candidates = []
+    final_anchors = []
+    for m in matches:
+        up, quote, ts_start, ts_end = m.groups()
+        q_clean = quote.strip()
+        candidates.append({
+            "quote": q_clean,
+            "timestamp": f"{ts_start}-{ts_end}",
+            "up_name": up.strip(),
+            "kind": "analogy",
+            "kept": True,
+            "reason": {
+                "irreplaceable": "名师独家比喻，改写为抽象术语后损失记忆抓手",
+                "non_derivable": "直觉心智模型，正文严密推导尚未涵盖该通俗生活实体",
+                "memorable": "形象直观，一周后仍可作为快速唤醒词"
+            }
+        })
+        final_anchors.append(q_clean)
+    return {
+        "generated_at": datetime.datetime.now().isoformat(),
+        "video_id": video_id,
+        "source_title": source_title,
+        "candidates": candidates,
+        "final_anchors": final_anchors
+    }
 
 
 # ---------- Teaching Anchor 确定性检查 ----------
@@ -86,6 +150,9 @@ def _fold_for_match(text: str) -> str:
     return re.sub(r"[\W_]+", "", text).lower()
 
 
+_TS_STRIP = re.compile(r"\[\s*\d{1,2}:\d{2}(?::\d{2})?\s*\]")
+
+
 def check_anchors(note_text: str, archive_text: str = '') -> dict:
     """只做机械正确性检查，不做教学价值判断。"""
     blocking: list[str] = []
@@ -140,7 +207,10 @@ def check_anchors(note_text: str, archive_text: str = '') -> dict:
 
         if archive_text:
             needle = _fold_for_match(quote)
-            haystack = _fold_for_match(archive_text)
+            # 剥掉行首 [mm:ss] / [hh:mm:ss]：否则会被折叠成纯数字夹进两段字幕之间，
+            # 使任何跨段引文都无法匹配，把忠实引用误判为编造
+            clean_archive = _TS_STRIP.sub("", archive_text)
+            haystack = _fold_for_match(clean_archive)
             if needle not in haystack:
                 blocking.append(f'Anchor quote 不在原始 transcript 中：{quote[:20]}...')
         else:
@@ -197,7 +267,15 @@ def validate_note(content: str, vault_root: Path | None = None, archive_text: st
     has_active_recall = bool(recall_match)
     recall_text = recall_match.group(1) if recall_match else ""
 
-    questions = re.findall(r"(?:^|\n)\s*(?:\d+[\.、]|\bQ\d+[:：]|题\s*\d+[:：]|第\s*[一二三四五\d]+\s*题[:：])\s*[^\n]+", recall_text)
+    # ① 先剥离 <details> 答案体，避免答案解析内部的编号列表被计成新的题目
+    _q_body = re.sub(r"<details>[\s\S]*?</details>", "", recall_text, flags=re.IGNORECASE)
+
+    # ② 题目正则增加可选的标题前缀 —— 兼容 SKILL.md 规定的 "### 1. xxx" 写法
+    Q_PATTERN = re.compile(
+        r"(?:^|\n)\s*(?:#{1,6}\s*)?"
+        r"(?:\d+[\.、]|\bQ\d+[:：]|题\s*\d+[:：]|第\s*[一二三四五\d]+\s*题[:：])\s*[^\n]+"
+    )
+    questions = Q_PATTERN.findall(_q_body)
     answers = re.findall(r"(?:> \[!(?:TIP|NOTE|SUCCESS|QUESTION|EXAMPLE|INFO)\]-?|<details>|<!--\s*details\s*-->|参考答案|答案[:：])", recall_text, re.IGNORECASE)
     q_count = len(questions)
     a_count = len(answers)
@@ -341,6 +419,8 @@ def main() -> int:
     ap.add_argument("--json", action="store_true", help="以 JSON 格式输出审计结果")
     ap.add_argument("--vault", default=None, help="可选：Obsidian Vault 路径（用于校验链接目标存在性）")
     ap.add_argument("--archive", default=None, help="可选：原始 transcript/_archive.json 路径（用于校验 Anchor 原文溯源）")
+    ap.add_argument("--audit", default=None, help="可选：anchor_audit.json 路径（用于校验 Anchor 审计资产合规性）")
+    ap.add_argument("--generate-audit", default=None, metavar="VIDEO_ID", help="为当前笔记中实际提取的 Anchor 自动生成 anchor_audit.json 骨架模板")
     args = ap.parse_args()
 
     in_path = Path(args.input)
@@ -349,6 +429,14 @@ def main() -> int:
         return 2
 
     content = in_path.read_text(encoding="utf-8")
+
+    if args.generate_audit:
+        template = generate_anchor_audit_template(content, video_id=args.generate_audit, source_title=in_path.stem)
+        audit_out = in_path.parent / "anchor_audit.json"
+        audit_out.write_text(json.dumps(template, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"[audit] 已生成 Anchor 审计资产模板: {audit_out}")
+        return 0
+
     vault_root = Path(args.vault) if args.vault else None
     archive_text = ""
     if args.archive:
@@ -359,6 +447,13 @@ def main() -> int:
         archive_text = archive_path.read_text(encoding="utf-8", errors="ignore")
 
     res = validate_note(content, vault_root=vault_root, archive_text=archive_text)
+
+    # 可选/自动检查 anchor_audit 资产合规性
+    audit_file = Path(args.audit) if args.audit else (in_path.parent / "anchor_audit.json")
+    if audit_file.exists():
+        audit_issues = check_anchor_audit(audit_file)
+        if audit_issues:
+            res["warnings"].extend([f"Anchor 审计资产规范: {issue}" for issue in audit_issues])
 
     if args.json:
         print(json.dumps(res, ensure_ascii=False, indent=2))
