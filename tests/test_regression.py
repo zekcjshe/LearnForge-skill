@@ -575,6 +575,24 @@ class TestDetectLanguageDurationParam(unittest.TestCase):
         self.assertEqual(sig.parameters["duration"].default, 0.0)
 
 
+# ------------------------------------------------------------------ B19: target_exists_in_index supports .md extension
+class TestTargetExistsWithExtension(unittest.TestCase):
+    """B19：target 传入带 .md 后缀的文件名时，应当能正确匹配 name_index 中的无后缀 stem。"""
+
+    def test_target_with_md_matches_stem_in_name_index(self):
+        from wikify import target_exists_in_index
+        index = {
+            "notes": {"folder/note1.md": {"stem": "note1", "rel_stem": "folder/note1"}},
+            "files": {"folder/note1.md": 123},
+            "name_index": {"note1": ["folder/note1"]},
+        }
+        self.assertTrue(target_exists_in_index("note1.md", index))
+        self.assertTrue(target_exists_in_index("note1", index))
+        self.assertTrue(target_exists_in_index("folder/note1.md", index))
+        self.assertTrue(target_exists_in_index("folder/note1", index))
+        self.assertFalse(target_exists_in_index("nonexistent.md", index))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

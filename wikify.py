@@ -295,27 +295,31 @@ def target_exists_in_index(target: str, index: dict) -> bool:
 
     target_clean = str(target).replace("\\", "/")
     target_md = target_clean if target_clean.endswith(".md") else f"{target_clean}.md"
+    target_stem = target_clean[:-3] if target_clean.endswith(".md") else target_clean
 
     # 1. 相对路径（如 "算法/DFS.md" 或 "算法/DFS"）精确命中
     if target_md in notes or target_md in files:
         return True
-    if any(n.get("rel_stem") == target_clean or n.get("stem") == target_clean for n in notes.values()):
+    if any(n.get("rel_stem") == target_clean or n.get("stem") == target_clean or n.get("stem") == target_stem for n in notes.values()):
         return True
 
-    # 2. 标题 / 别名 / 名称索引精确命中
+    # 2. 标题 / 别名 / 名称索引精确命中（同时支持含或不含 .md）
     if target in name_index and len(name_index[target]) > 0:
+        return True
+    if target_stem in name_index and len(name_index[target_stem]) > 0:
         return True
 
     # 3. 大小写不敏感回退匹配（解决 dfs.md vs [[DFS]] 等常见场景）
     target_lower = target.lower()
+    target_stem_lower = target_stem.lower()
     target_md_lower = target_md.lower()
     target_clean_lower = target_clean.lower()
     if any(k.lower() == target_md_lower for k in notes.keys()) or any(k.lower() == target_md_lower for k in files.keys()):
         return True
-    if any(n.get("rel_stem", "").lower() == target_clean_lower or n.get("stem", "").lower() == target_clean_lower for n in notes.values()):
+    if any(n.get("rel_stem", "").lower() == target_clean_lower or n.get("stem", "").lower() == target_stem_lower for n in notes.values()):
         return True
     for name, candidates in name_index.items():
-        if name.lower() == target_lower and len(candidates) > 0:
+        if (name.lower() == target_lower or name.lower() == target_stem_lower) and len(candidates) > 0:
             return True
 
     return False
@@ -388,7 +392,7 @@ def inject_into_segment(
             if m and not found:
                 matched_text = m.group(0)
                 display_text = matched_text
-                link_target = target
+                link_target = target[:-3] if str(target).endswith(".md") else str(target)
                 if "/" in link_target:
                     replacement = f"[[{link_target}|{display_text}]]"
                 else:
