@@ -96,7 +96,7 @@ pip install -r requirements.txt
 > [!TIP]
 > - **优先复用字幕**：B 站带字幕的视频无需跑语音模型，数秒即可提取完毕。
 > - **普通 CPU 即可跑**：内置 Faster-Whisper 基于 CTranslate2，轻薄本 CPU 也能流畅离线转录，完全无需独立显卡。
-> - **全网检索与优雅降级**：主题学习模式优先联动 `bilibili` MCP 自动发现高赞互补视频；若未配置该 MCP，直接为 Agent 提供 1~2 个 B 站视频 URL 同样能完美执行多源综合。
+> - **全网检索与原生 B 站 MCP 协同**：内置对 `@xzxzzx/bilibili-mcp` 的一等公民支持。只需在智能体 MCP 配置中添加 `"bilibili-search": { "command": "npx", "args": ["-y", "@xzxzzx/bilibili-mcp@latest"] }`，即可实现 B 站全网精准搜索、UP 主定位、分集元数据及秒级原生字幕直达，无 WBI 412 封禁风险，亦支持无缝降级。
 
 > [!NOTE] 开发者本地同步提示
 > 若在本地独立目录开发，可使用软链接（如 PowerShell: `New-Item -ItemType Junction -Path "$HOME\.claude\skills\video2obsidian" -Target "E:\LearnForge-skill"`）链接到 Agent 技能路径，避免副本版本脱节。
