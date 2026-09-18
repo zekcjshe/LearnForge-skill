@@ -10,7 +10,7 @@
 <br>
 
 [![Obsidian Native](https://img.shields.io/badge/Obsidian-Native%20Markdown-purple.svg)](https://obsidian.md/)
-[![Universal Markdown](https://img.shields.io/badge/Markdown-Universal%20Self--Contained-blue.svg)](#-极速上手我该怎么用起来)
+[![Universal Markdown](https://img.shields.io/badge/Markdown-Universal%20Self--Contained-blue.svg)](#-安装与使用)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -60,52 +60,34 @@
 
 ---
 
-## 🚀 极速上手：我该怎么用起来？
+## 🚀 安装与使用
+
+作为 **AI Agent 技能** 挂载使用（支持 Claude Code、Antigravity CLI、Cline 等智能体环境）。
 
 > 💡 **没有 Obsidian 能用吗？**  
 > **完全可以！** 最终生成的是 **100% 标准自包含 Markdown**。在 Typora、Notion、VS Code 或任意编辑器中均可完美阅读（折叠自测题原生兼容）。如果你使用 Obsidian，则能额外享受双链与知识图谱的联动。
 
-你可以根据手头的条件，选择最适合的使用方式：
-
-### 姿势 1：零环境纯提示词体验（今晚就能试）
-> **适合：快速体验“认知重构”的笔记框架，无需安装任何环境与依赖。**
-
-1. 打开仓库里的 [`core/teaching_base.md`](core/teaching_base.md) 复制其中的教学规范；
-2. 粘贴至任意网页版大模型（DeepSeek / Claude / ChatGPT）作为 System Prompt；
-3. 贴入你手头的课程字幕或讲义文本，让 AI 为你重构成结构化笔记。
-*(注：纯提示词模式专注于输出直觉、陷阱推演与自测题；若需全自动处理 2 小时视频、秒级时间戳精准核验与知识库双链，请使用姿势 2 或 3)*
-
-### 姿势 2：作为 AI Agent 技能使用（最省心 ⭐⭐⭐⭐⭐）
-> **适合：使用 Claude Code、Antigravity 或 Cline 等智能体的学习者。**
+### 1. 一键挂载到 Agent
+将本仓库克隆至你的 Agent 技能目录，并安装底层处理依赖：
 
 ```bash
+# 克隆至技能目录（以 Claude Code / Antigravity 为例）
 git clone https://github.com/zekcjshe/LearnForge-skill.git "$HOME/.claude/skills/video2obsidian"
-```
-挂载后，直接在聊天框贴 B 站链接或说“我想学 XXX”，Agent 会在后台自动调用工具链，跑完长视频下载、音频切片脱水、时间戳审计与笔记写入全流程。
 
-### 姿势 3：本地 CLI 引擎运行（适合开发者 / 离线批处理）
-> **适合：有 Python 环境，希望本地自动化下载与脱水。**
-
-```bash
-# 1. 安装依赖
-git clone https://github.com/zekcjshe/LearnForge-skill.git
-cd LearnForge-skill
+# 安装底层音频提取与脱水依赖
+cd "$HOME/.claude/skills/video2obsidian"
 pip install -r requirements.txt
-
-# 2. 常用操作指令
-# 快速查看视频分块指纹（毫秒级）
-python extract.py "https://www.bilibili.com/video/BV1..." --chunk-index
-
-# 仅提取核心切片证据并过滤废话
-python extract.py "https://www.bilibili.com/video/BV1..." --chunks 1,3 --evidence -o evidence.json
-
-# 将生成好的笔记安全注入本地 Vault（自动建立真实双链）
-python wikify.py all --vault "D:/MyVault" --terms terms.json --input draft.md --output final.md
 ```
 
 > [!TIP]
 > - **优先复用字幕**：带字幕的视频无需跑语音模型，数秒即可提取完毕。
-> - **普通 CPU 即可跑**：内置 Faster-Whisper 基于 CTranslate2，轻薄本 CPU 也能流畅离线转录，完全无需独立显卡。
+> - **普通 CPU 即可跑**：内置 Faster-Whisper 基于 CTranslate2，轻薄本 CPU 也能流畅离线转录，完全无需配置独立显卡。
+
+### 2. 对 Agent 说一句话即可
+挂载完成后，直接在 Agent 聊天框中发送你的需求，Agent 会在后台自动调用工具链跑完长视频下载、音频切片脱水、时间戳审计与笔记写入全流程：
+
+- 🎯 **主题学习**：“我想彻底搞懂 Raft 分布式一致性算法，帮我在 B 站找优质视频整理进 Obsidian。”
+- 🎥 **长视频精读**：“帮我深度精读这个公开课：https://www.bilibili.com/video/BVxxxxxx”
 
 ---
 
