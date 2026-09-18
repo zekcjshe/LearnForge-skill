@@ -67,24 +67,41 @@
 > 💡 **没有 Obsidian 能用吗？**  
 > **完全可以！** 最终生成的是 **100% 标准自包含 Markdown**。在 Typora、Notion、VS Code 或任意编辑器中均可完美阅读（折叠自测题原生兼容）。如果你使用 Obsidian，则能额外享受双链与知识图谱的联动。
 
-### 1. 一键挂载到 Agent
-将本仓库克隆至你的 Agent 技能目录，并安装底层处理依赖：
+### 方式 1：直接把这段提示词发给你的智能体（最推荐，免开终端）
+
+如果你正在使用 Claude Code、Antigravity 或 Cline，**直接复制以下内容发送给你的 Agent**，它会自动帮你拉取并配置就绪：
+
+```text
+请帮我安装这个 Agent Skill。
+
+- 源地址：https://github.com/zekcjshe/LearnForge-skill.git
+- Skill 名称：video2obsidian
+
+请先阅读 SKILL.md 以及所有配套文件。
+如果当前环境可以执行命令，请将包含 SKILL.md 的完整 skill 目录安装到我的 Agent skills 目录（如 `$HOME/.claude/skills/video2obsidian`），保留 core/、profiles/ 等完整相对目录结构，并在对应目录下执行 `pip install -r requirements.txt` 安装必要依赖。安装完成后，请确认目标 skills 目录包含 SKILL.md 和全部配套文件。
+```
+
+### 方式 2：手动终端命令行安装
+如果你习惯自己在终端操作：
 
 ```bash
-# 克隆至技能目录（以 Claude Code / Antigravity 为例）
+# 1. 克隆至技能目录（以 Claude Code / Antigravity 为例）
 git clone https://github.com/zekcjshe/LearnForge-skill.git "$HOME/.claude/skills/video2obsidian"
 
-# 安装底层音频提取与脱水依赖
+# 2. 安装底层音频提取与脱水依赖
 cd "$HOME/.claude/skills/video2obsidian"
 pip install -r requirements.txt
 ```
 
 > [!TIP]
-> - **优先复用字幕**：带字幕的视频无需跑语音模型，数秒即可提取完毕。
-> - **普通 CPU 即可跑**：内置 Faster-Whisper 基于 CTranslate2，轻薄本 CPU 也能流畅离线转录，完全无需配置独立显卡。
+> - **优先复用字幕**：B 站带字幕的视频无需跑语音模型，数秒即可提取完毕。
+> - **普通 CPU 即可跑**：内置 Faster-Whisper 基于 CTranslate2，轻薄本 CPU 也能流畅离线转录，完全无需独立显卡。
 
-### 2. 对 Agent 说一句话即可
-挂载完成后，直接在 Agent 聊天框中发送你的需求，Agent 会在后台自动调用工具链跑完长视频下载、音频切片脱水、时间戳审计与笔记写入全流程：
+---
+
+### 💬 开始使用：对 Agent 说一句话即可
+
+挂载完成后，直接在 Agent 聊天框中发送你的需求，Agent 会在后台自动调度工具链跑完长视频下载、音频切片脱水、时间戳审计与笔记写入全流程：
 
 - 🎯 **主题学习**：“我想彻底搞懂 Raft 分布式一致性算法，帮我在 B 站找优质视频整理进 Obsidian。”
 - 🎥 **长视频精读**：“帮我深度精读这个公开课：https://www.bilibili.com/video/BVxxxxxx”
