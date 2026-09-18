@@ -8,7 +8,7 @@ validate_note.py — 教学重构笔记质量门禁（Quality Gate）
   2. 教学完备性：全篇通关目标、模块目标、闭环自测（Active Recall 3题+折叠答案）
   3. 来源可溯性：原片时间戳锚点、三元来源标注（[🎥 原片] / [📎 补充推导] / [⚠️ 教学解释]）
   4. 代码一致性：算法代码必须匹配时空复杂度分析
-  5. Teaching Anchor 机械正确性（数量 ≤ 3，长度 ≤ 50，时间戳合法，无格式残缺，格式漂移即报错，可选 --archive 原文溯源，比对时忽略标点差异）
+  5. Teaching Anchor 机械正确性（数量 ≤ 6，长度 ≤ 100，时间戳合法，无格式残缺，格式漂移即报错，可选 --archive 原文溯源，比对时忽略标点差异）
   6. Wikilink 真实存在性检验（联动 --vault，杜绝假知识节点与悬空链接）
 """
 
@@ -97,7 +97,7 @@ def generate_anchor_audit_template(note_text: str, video_id: str = "BV_TODO", so
 # 【为什么把话筒图标单独拎出来】🎙️ 是 **两个码点**：U+1F399 + U+FE0F（变体选择符）。
 # 写成 [🎙️🎤] 的字符类只吃一个码点，它吞掉 🎙 后，U+FE0F 无人认领，
 # 紧跟其后的 "原片教学锚点" 就永远匹配不上 —— 而 SKILL.md 规定的格式正是带变体符的 🎙️。
-# 结果是全套 Anchor 检查（≤3 条 / ≤50 字 / 时间戳 / UP主 / 原文溯源）静默空转，
+# 结果是全套 Anchor 检查（≤6 条 / ≤100 字 / 时间戳 / UP主 / 原文溯源）静默空转，
 # 且因为 marker_count 与 count 同时为 0，连一条警告都不会发。
 # 所以用 [🎙🎤] + U+FE0F 可选来兼容两种写法（变体符写成 ️ 转义，
 # 免得哪天编辑器/工具链把它抹掉，正则又悄悄退回那个匹配不上的版本）。
@@ -117,8 +117,8 @@ ANCHOR_MARKER_PATTERN = re.compile(
 # 真实写法脱节，检查会静默归零而不是报错。所以额外统计"引用块里提到原片教学锚点"
 # 的行数，只要多于完整解析数，就说明格式漂移了 —— 宁可吵，也不能静默放过。
 ANCHOR_MENTION_PATTERN = re.compile(r'^>.*原片教学锚点', re.MULTILINE)
-MAX_ANCHORS = 3
-MAX_ANCHOR_CHARS = 50
+MAX_ANCHORS = 6
+MAX_ANCHOR_CHARS = 100
 
 
 def _ts_to_sec(ts: str) -> int | None:

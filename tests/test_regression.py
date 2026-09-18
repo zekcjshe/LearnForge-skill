@@ -106,18 +106,18 @@ class TestAnchorEmojiVariant(unittest.TestCase):
         note = make_note([("整条马路都堵死了收费站必须限流", "03:10 - 03:24", "UP主")], mic=MIC_BARE)
         self.assertEqual(len(validate_note.ANCHOR_QUOTE_PATTERN.findall(note)), 1)
 
-    def test_hard_cap_of_three_is_enforced(self):
-        """上限 3 条。修复前这份笔记拿满分——因为它一条 anchor 都没"看见"。"""
-        note = make_note([(f"第{i}句原话", f"0{i}:10 - 0{i}:24", "UP主") for i in range(1, 6)])
+    def test_hard_cap_of_six_is_enforced(self):
+        """上限 6 条。修复前这份笔记拿满分——因为它一条 anchor 都没"看见"。"""
+        note = make_note([(f"第{i}句原话", f"0{i}:10 - 0{i}:24", "UP主") for i in range(1, 8)])
         res = validate_note.validate_note(note)
         self.assertFalse(res["passed"])
-        self.assertEqual(res["metrics"]["anchor_count"], 5)
+        self.assertEqual(res["metrics"]["anchor_count"], 7)
         self.assertTrue(any("上限" in e for e in res["errors"]), res["errors"])
 
     def test_oversized_quote_is_blocked(self):
-        note = make_note([("这是" * 31, "03:10 - 03:24", "UP主")])
+        note = make_note([("这是" * 51, "03:10 - 03:24", "UP主")])
         res = validate_note.validate_note(note)
-        self.assertTrue(any("50 字" in e for e in res["errors"]), res["errors"])
+        self.assertTrue(any("100 字" in e for e in res["errors"]), res["errors"])
 
     def test_malformed_body_is_loud(self):
         """标记行正常、正文行错位（这里是多插了一个空行）→ 由"结构不完整"拦下。"""

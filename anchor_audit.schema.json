@@ -32,7 +32,7 @@
           "quote": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 50
+            "maxLength": 100
           },
           "timestamp": {
             "type": "string",
@@ -84,7 +84,7 @@
     "final_anchors": {
       "type": "integer",
       "minimum": 0,
-      "maximum": 3
+      "maximum": 6
     },
     "final_selection_reason": {
       "type": "string"
