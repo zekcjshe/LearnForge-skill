@@ -62,14 +62,14 @@
 
 ## 🚀 安装与使用
 
-作为 **AI Agent 技能** 挂载使用（支持 Claude Code、Antigravity CLI、Cline 等智能体环境）。
+作为 **AI Agent 技能** 挂载使用（广泛兼容 **Claude Code**、**Antigravity**、**Cline / Roo Code**、**Cursor**、**Windsurf**、**Codex** 等各类支持命令执行或技能扩展的 AI 智能体）。
 
 > 💡 **没有 Obsidian 能用吗？**  
 > **完全可以！** 最终生成的是 **100% 标准自包含 Markdown**。在 Typora、Notion、VS Code 或任意编辑器中均可完美阅读（折叠自测题原生兼容）。如果你使用 Obsidian，则能额外享受双链与知识图谱的联动。
 
 ### 方式 1：直接把这段提示词发给你的智能体（最推荐，免开终端）
 
-如果你正在使用 Claude Code、Antigravity 或 Cline，**直接复制以下内容发送给你的 Agent**，它会自动帮你拉取并配置就绪：
+如果你正在使用任意 AI Agent，**直接复制以下内容发送给它**，智能体会自动拉取并配置就绪：
 
 ```text
 请帮我安装这个 Agent Skill。
@@ -78,14 +78,14 @@
 - Skill 名称：video2obsidian
 
 请先阅读 SKILL.md 以及所有配套文件。
-如果当前环境可以执行命令，请将包含 SKILL.md 的完整 skill 目录安装到我的 Agent skills 目录（如 `$HOME/.claude/skills/video2obsidian`），保留 core/、profiles/ 等完整相对目录结构，并在对应目录下执行 `pip install -r requirements.txt` 安装必要依赖。安装完成后，请确认目标 skills 目录包含 SKILL.md 和全部配套文件。
+如果当前环境可以执行命令，请将包含 SKILL.md 的完整 skill 目录克隆或安装到当前智能体的 skills / 扩展技能目录（如 `$HOME/.claude/skills/video2obsidian`，或当前项目适用的技能扩展路径），保留 core/、profiles/ 等完整相对目录结构，并在对应目录下执行 `pip install -r requirements.txt` 安装必要依赖。安装完成后，请确认目标 skills 目录包含 SKILL.md 和全部配套文件。
 ```
 
 ### 方式 2：手动终端命令行安装
 如果你习惯自己在终端操作：
 
 ```bash
-# 1. 克隆至技能目录（以 Claude Code / Antigravity 为例）
+# 1. 克隆至技能目录（以 Claude Code / Antigravity 为例，其他 Agent 请放入对应的技能/扩展路径）
 git clone https://github.com/zekcjshe/LearnForge-skill.git "$HOME/.claude/skills/video2obsidian"
 
 # 2. 安装底层音频提取与脱水依赖
