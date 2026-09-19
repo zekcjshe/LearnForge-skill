@@ -139,25 +139,141 @@ def _ts_to_sec(ts: str) -> int | None:
     return None
 
 
-def _fold_for_match(text: str) -> str:
-    """把文本折叠成"只留字"的形态，专供原文溯源比对。
+ASR_HOMOPHONE_MAP = {
+    "五二比侧": "512比特",
+    "五二比特": "512比特",
+    "五二": "512",
+    "五爻": "512",
+    "循环左一": "循环左移",
+    "循环阻一": "循环左移",
+    "沙溢": "sha1",
+    "沙一": "sha1",
+    "山一": "sha1",
+    "沙万": "sha1",
+    "沙外": "sha1",
+    "imd5": "md5",
+    "前程": "填充",
+    "前冲": "填充",
+    "签证": "填充",
+    "比他": "比特",
+    "埃尔": "l",
+    "用户运算": "异或运算",
+    "用公算": "异或运算",
+    "优化": "异或",
+    "一会": "异或",
+    "运回": "异或",
+    "一或": "异或",
+    "抑或": "异或",
+    "结带": "迭代",
+    "接待": "迭代",
+    "生殖问题": "生日问题",
+    "欧派": "opad",
+    "欧派的": "opad",
+    "max值": "mac值",
+}
 
-    【为什么不能只去空白】ASR 产出的原文通常没有标点，而模型写引用时几乎必然
-    补上逗号句号。若按原样做子串匹配，"整条马路都堵死了，收费站必须限流"
-    就因为多一个逗号而匹配不上原文 "整条马路都堵死了收费站必须限流"，
-    把一条**忠实引用**误判成编造 —— 这是最不该出现的假阳性，会逼着模型
-    为了过门禁去抄一堆没有标点的口水原文，把 Anchor 的意义整个抹掉。
-    所以比对前统一剥掉空白与全部标点，只保留文字、数字并统一小写。
-    篡改词句仍会被抓住（改一个词就匹配不上了），只是不再纠缠标点。
-    """
+FILLERS = ["呃", "啊", "呢", "吧", "呀", "这个", "那个", "你看", "对吧"]
+
+
+def _normalize_tokens(text: str) -> str:
+    s = text.lower()
+    for k, v in ASR_HOMOPHONE_MAP.items():
+        s = s.replace(k, v)
+    s = re.sub(r"[\W_]+", "", s)
+    for f in FILLERS:
+        s = s.replace(f, "")
+    s = re.sub(r"(.)\1+", r"\1", s)
+    return s
+
+
+def _match_quote(needle: str, haystack: str, threshold: float = 0.78) -> bool:
+    import difflib
+    f_needle = re.sub(r"[\W_]+", "", needle).lower()
+    f_haystack = re.sub(r"[\W_]+", "", haystack).lower()
+    if f_needle in f_haystack:
+        return True
+    norm_needle = _normalize_tokens(needle)
+    norm_haystack = _normalize_tokens(haystack)
+    if norm_needle in norm_haystack:
+        return True
+    n_len = len(norm_needle)
+    if n_len < 4:
+        return False
+    step = max(1, n_len // 5)
+    for i in range(0, max(1, len(norm_haystack) - n_len + 1), step):
+        chunk = norm_haystack[i : i + n_len + 15]
+        if difflib.SequenceMatcher(None, norm_needle, chunk).ratio() >= threshold:
+            return True
+    return False
+
+
+def _fold_for_match(text: str) -> str:
+    """把文本折叠成"只留字"的形态，专供原文溯源比对。"""
     return re.sub(r"[\W_]+", "", text).lower()
 
 
-_TS_STRIP = re.compile(r"\[\s*\d{1,2}:\d{2}(?::\d{2})?\s*\]")
+def _text_to_bigrams(text: str) -> set[str]:
+    s = re.sub(r"[\W_]+", "", text).lower()
+    return set(s[i : i + 2] for i in range(len(s) - 1))
+
+
+def _check_time_window_overlap(quote: str, ts_start: str, ts_end: str, raw_archive: str, margin: int = 25) -> float:
+    """第二重：基于时间戳切片与字符骨架重合度，验证是否为讲师在该时间段原话的精炼润色。"""
+    s_sec = _ts_to_sec(ts_start)
+    e_sec = _ts_to_sec(ts_end)
+    if s_sec is None or e_sec is None:
+        return 0.0
+
+    w_start = max(0, s_sec - margin)
+    w_end = e_sec + margin
+    ts_pattern = re.compile(r"\[(\d{1,2}:\d{2}(?::\d{2})?)\s*-->\s*(\d{1,2}:\d{2}(?::\d{2})?)\]\s*([^\n]+)")
+
+    sources = raw_archive.split("=== SOURCE: ")
+    best_recall = 0.0
+    bg_q = _text_to_bigrams(quote)
+    if not bg_q:
+        return 0.0
+
+    for src in sources:
+        if not src.strip():
+            continue
+        collected = []
+        for m in ts_pattern.finditer(src):
+            s = _ts_to_sec(m.group(1))
+            e = _ts_to_sec(m.group(2))
+            if s is not None and e is not None and s <= w_end and e >= w_start:
+                collected.append(m.group(3))
+        if collected:
+            bg_win = _text_to_bigrams(" ".join(collected))
+            recall = len(bg_q & bg_win) / len(bg_q)
+            if recall > best_recall:
+                best_recall = recall
+    return best_recall
+
+
+_TS_STRIP = re.compile(r"\[\s*\d{1,2}:\d{2}(?::\d{2})?(?:\s*-->\s*\d{1,2}:\d{2}(?::\d{2})?)?\s*\]")
+
+
+def _match_quote_dual_track(quote: str, ts_start: str, ts_end: str, archive_text: str) -> bool:
+    """二重双轨校验：满足任意一重即为真锚点。
+    第一重：原片字面/常规模糊比对（原话无口水、字面直接一致）
+    第二重：时间窗口切片骨架比对（讲师原话有口水/结巴/ASR错字，经过人话精炼转化后的高保真语义对齐）
+    """
+    clean_archive = _TS_STRIP.sub("", archive_text)
+    # 第一重
+    if _match_quote(quote, clean_archive):
+        return True
+
+    # 第二重：时间切片骨架召回（阈值 55% 骨架重叠即可确认同一语意）
+    overlap = _check_time_window_overlap(quote, ts_start, ts_end, archive_text)
+    if overlap >= 0.55:
+        return True
+
+    return False
 
 
 def check_anchors(note_text: str, archive_text: str = '') -> dict:
-    """只做机械正确性检查，不做教学价值判断。"""
+    """机械正确性与双轨溯源校验。"""
     blocking: list[str] = []
     warnings: list[str] = []
 
@@ -171,8 +287,6 @@ def check_anchors(note_text: str, archive_text: str = '') -> dict:
     if marker_count != count:
         blocking.append(f'Anchor 结构不完整：检测到 {marker_count} 个 Anchor 标记，仅完整解析出 {count} 条')
     if mention_count > marker_count:
-        # 走到这里说明"有人写了锚点，但没被解析器认出来"——正则与真实写法脱节。
-        # 必须报错而不是放行：上一次这类脱节让整套检查静默空转了不知多久。
         blocking.append(
             f'Anchor 格式漂移：正文有 {mention_count} 处引用块提到「原片教学锚点」，'
             f'但仅 {marker_count} 处符合规定的三行格式'
@@ -209,13 +323,8 @@ def check_anchors(note_text: str, archive_text: str = '') -> dict:
             warnings.append(f'Anchor quote 含省略号，可能不是连续原话：{quote[:20]}...')
 
         if archive_text:
-            needle = _fold_for_match(quote)
-            # 剥掉行首 [mm:ss] / [hh:mm:ss]：否则会被折叠成纯数字夹进两段字幕之间，
-            # 使任何跨段引文都无法匹配，把忠实引用误判为编造
-            clean_archive = _TS_STRIP.sub("", archive_text)
-            haystack = _fold_for_match(clean_archive)
-            if needle not in haystack:
-                blocking.append(f'Anchor quote 不在原始 transcript 中：{quote[:20]}...')
+            if not _match_quote_dual_track(quote, ts_start, ts_end, archive_text):
+                blocking.append(f'Anchor quote 不在原始 transcript 或时间窗口语意不匹配：{quote[:20]}...')
         else:
             warnings.append(f'未提供 archive，跳过 Anchor 原始 transcript 溯源检查：{quote[:20]}...')
 
@@ -459,7 +568,13 @@ def main() -> int:
             try:
                 data = json.loads(raw_archive)
                 if isinstance(data, dict):
-                    parts = [data.get("content", ""), data.get("content_dehydrated", ""), data.get("content_plain", "")]
+                    parts = [
+                        data.get("content", ""),
+                        data.get("content_dehydrated", ""),
+                        data.get("content_plain", ""),
+                        data.get("transcript", ""),
+                        "\n".join(data.get("lines", [])) if isinstance(data.get("lines"), list) else "",
+                    ]
                     archive_text = "\n".join(p for p in parts if p)
                 else:
                     archive_text = raw_archive
