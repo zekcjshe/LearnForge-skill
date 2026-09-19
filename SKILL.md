@@ -108,3 +108,22 @@ integration_strategy:
    - 提取 Teaching Anchor 候选，执行 Q1/Q2/Q3 淘汰并产出 `anchor_audit.json`；
    - 遵循六段式 Learning Launchpad 结构编写综合主题笔记。
 4. **归档闭环**：执行 `wikify.py all --vault <vault>` 注入与 `validate_note.py --vault <vault> --archive <archive>` 质量门禁，确保满分入库。
+
+---
+
+## 🧭 用户专属工作流习惯与作业规范 (User Workflow & Preferences)
+
+针对当前知识库（网络空间安全 893 考研 / 密码学体系），Agent 必须默认遵循以下实战工作流习惯：
+
+1. **核心权威信源锚定**：
+   - 理论、数学推导与大题考点：优先锁定**西电杨波教授**公开课；
+   - 直觉模型、机制细节与工程漏洞（如 PS3 惨案）：协同使用 **UP 主「可厉害的土豆」**。
+2. **教学锚点（Teaching Anchor）创作习惯**：
+   - **全篇上限 6 条，单条最长 100 字**（黄金区间 30~70 字）；
+   - **坚决杜绝断头句**：必须是一句自包含、语义清晰、独立完整的人话（具备完整主谓宾或逻辑判断）；
+   - **主动融合上下文**：结合时间切片（±25s）前后文语义提炼精华，杜绝讲师结巴碎碎念与 ASR 乱码，且绝不为了迁就门禁降低文字质量。
+3. **章节推进标准作业节拍 (Standard Cadence)**：
+   - **Step 1 字幕资产固化**：先通过 Bilibili MCP 抓取全章原片字幕，合并生成 `chX_all_transcripts.json`；
+   - **Step 2 教学重构与锚点精炼**：编写各分节 Launchpad 笔记，注入高质量完整句锚点；
+   - **Step 3 确定性回归闭环**：编写并运行自动化测试脚本 `check_chX.py`，必须全部达到 **100/100 PASSED**；
+   - **Step 4 资产版本控制与推送**：里程碑完成后，响应用户「推送」指令，规范执行 Git commit 与 push。
