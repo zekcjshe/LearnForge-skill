@@ -45,11 +45,11 @@ Teaching Anchor 是保留“原讲师怎么讲这个知识”的短摘录，不�
   严禁直接把转录产生的碎碎念、结巴倒装或严重音译错字（如*“五二比侧”、“循环左一”、“多多了一个什么多了一个分组”、“把第一轮搞清楚就OK了”*）生搬硬套进笔记。
 - **允许且提倡高质量人话精炼**：
   讲师原话口水过多时，必须在**保留原句核心术语、教学逻辑与经典比喻**的前提下，剔除结巴废话，进行专业化人话精炼，让学习者能真正看懂。
-- **门禁二重双轨校验机制（Dual-Track Verification）**：
-  `validate_note.py` 会自动执行双轨验证，满足任意一轨即判定为真锚点：
-  1. **字面对齐轨**：原话本身通顺无废话，直接与原始字幕字面匹配（忽略标点与常见同音正字）。
-  2. **时间窗口骨架语义轨**：原话口水过多经人话精炼后的引文，系统定位其 `[mm:ss - mm:ss]` 时间窗口原片字幕，计算 2-gram 字符骨架召回率（Recall ≥ 55% 即判定合格）。
-  既杜绝脱离上下文凭空捏造（跨时段或无中生有将被当场拦截），又彻底解放引文表达质量。
+- **门禁二重双轨校验机制与语义子类型（Dual-Track Verification & Subtypes）**：
+  为确保严密真实性，Anchor 在底层审计中区分两种明确子类型，`validate_note.py` 满足对应轨即判定为真锚点：
+  1. **`verbatim`（逐字原片引文轨）**：原话本身通畅精辟无废话，直接与原始字幕逐字匹配（忽略标点与常见同音正字）。
+  2. **`grounded_rewrite`（时间窗口骨架语义轨）**：原话口水过多经人话精炼后的引文，系统定位其 `[mm:ss - mm:ss]`（±25s 时间窗口）原片字幕，计算 2-gram 字符骨架召回率（Recall ≥ 55%）。
+  既杜绝脱离上下文凭空捏造（跨时段或无中生有将被当场拦截），又彻底解放引文表达质量与学术公信力。
 - **必须带真实时间戳区间**，且与字幕中该句的实际位置一致。严禁使用 `[00:00 - 30:00]` 这类跨度极大的占位时间戳。
 - **署名必须与真实信源一致**：UP 主名须与 frontmatter `sources[].author` 对应。
 - **[强制] 质量门禁必须传 `--archive`**：
@@ -74,37 +74,43 @@ integration_strategy:
 
 ---
 
-## 模式 A：单视频提炼模式（用户提供 URL / "总结这个视频"）
+## 🏗️ 统一学习作业架构 (Unified Learning Job)
 
-1. **五级 Token 递进证据提取**：
-   ```bash
-   # 1. 优先提取智能导航索引（自动执行字幕快车道、内嵌章节匹配与 L0-B 极速粗侦察）
-   python "<skills-dir>/video2obsidian/extract.py" "<URL>" --chunk-index
-   # 2. 仅对相关分块提取 L1.5 极简证据（再压 50% 上下文）
-   python "<skills-dir>/video2obsidian/extract.py" "<URL>" --chunks 1,2 --evidence --json -o "<temp-dir>/v2n.json"
-   ```
-2. **知识重构**：编写自包含 Learning Launchpad（Pre-test 预测试、通关目标、直觉模型、代码/机理推演、陷阱实验室、Post-test 自测、Recall Cards、Verifiable Micro-task）。
-3. **知识连接与确定性质量门禁**：
+无论用户从哪种入口发起，LearnForge 在内部均将其标准化为统一的 `Learning Job`。
+**模式 A 与模式 B 仅在上游信源接入层（Source Acquisition）存在差异，下游流水线完全收敛对齐：**
+
+```text
+[Source-driven 入口]：用户给定 URL / 视频 ──┐
+                                          ├──→ 锁定 Source Set (单源或多源)
+[Goal-driven 入口]  ：用户给定 Topic/学习目标 ─┘        ↓
+                                            Evidence Extraction (五级 Token 漏斗按需取证)
+                                                       ↓
+                                            Learning Plan Generation (动态考点清单 must_cover)
+                                                       ↓
+                                            Knowledge Synthesis (Teaching Launchpad 六段式)
+                                                       ↓
+                                            Wikify Injection (幂等双链连接)
+                                                       ↓
+                                            Deterministic Quality Gate (二重双轨防幻觉门禁)
+```
+
+### 1. 上游信源接入层 (Source Acquisition)
+- **模式 A：信源驱动 (Source-driven)**：用户提供 1 个或多个视频 URL。直接锁定目标信源集并抽取章节技术特征。
+- **模式 B：目标驱动 (Goal-driven)**：用户提出学习目标（如“彻底搞懂 Raft”）。系统通过 `@xzxzzx/bilibili-mcp` 或内置检索锁定 2 个高赞/互补信源，构成目标 Source Set。
+
+### 2. 统一收敛下游流水线 (Unified Downstream Pipeline)
+1. **证据提取 (Evidence Extraction)**：
+   - 运行 `extract.py <url> --chunk-index` 建立导航索引；
+   - 针对目标章节提取 L1.5 极简证据（`--chunks <ids> --evidence`），剔除口水词，保留公式、代码与陷阱。
+2. **学习规划 (Learning Plan)**：
+   - 无论是单视频还是横向主题，统一基于 [`core/learning_plan_schema.md`](core/learning_plan_schema.md) 与 [`profiles/exemplars/`](profiles/exemplars/) 生成必掌握清单 (`must_cover`)，确立主认知范型与嵌入策略，杜绝知识遗漏。
+3. **知识重构 (Knowledge Synthesis)**：
+   - 提取 Teaching Anchor 候选并区分 `verbatim` 与 `grounded_rewrite`，执行 Q1/Q2/Q3 淘汰并旁路产出 `anchor_audit.json`；
+   - 遵循六段式 Learning Launchpad 编写自包含教学笔记（Pre-test 预测试、通关目标、直觉模型、时序/机理推演、陷阱实验室、Post-test 自测、Verifiable Micro-task）。
+4. **双链注入与质量门禁 (Wikify & Quality Gate)**：
    ```bash
    # 1. 术语提取 + 幂等注入（严格校验 Vault 真实存在性）
-   #    必须用 all（= scan + inject 一步到位）：直接用 inject 在全新机器上会因
-   #    索引不存在而 exit 2。此处使用 --weak-links none 保持正文纯净，避免在文末产生多余弱链/歧义页脚。
    python "<skills-dir>/video2obsidian/wikify.py" all --vault "<vault-dir>" --terms "terms.json" --input "note.md" --output "note_final.md" --weak-links none
-   # 2. 确定性质量审计（Active Recall 检验、代码与 Mermaid 检查、Wikilink 真实性、Anchor 机械与原文溯源检查）
+   # 2. 确定性质量审计（Active Recall 检验、代码与 Mermaid 检查、Wikilink 真实性、Anchor 双轨溯源与审计资产检查）
    python "<skills-dir>/video2obsidian/validate_note.py" "note_final.md" --vault "<vault-dir>" --archive "<archive-path>" --audit "<audit-json-path>"
    ```
-
----
-
-## 模式 B：横向主题学习模式（用户提需求 "我要学 <Topic>" / "搞懂 <Topic>"）
-
-1. **自适应学习规划 (Learning Plan)**：
-   - 参考 [`core/learning_plan_schema.md`](core/learning_plan_schema.md) 与 [`profiles/exemplars/`](profiles/exemplars/) 认知范例，动态生成 `Learning Plan`：指定 `primary_exemplar` 与 `secondary_exemplars`，定义嵌入式融合策略与必掌握清单 (`must_cover`)。
-2. **缺口驱动多源取证 (Bilibili-First Discovery)**：
-   - **优先路由**：环境已配置 `@xzxzzx/bilibili-mcp` 或已挂载 `bili_helper.py` 时，直接调用 MCP 工具（`search_bilibili_videos`、`search_bilibili_creators`、`get_video_transcript`、`get_video_metadata`）检索高赞/指定 UP 主视频并秒级提取原片转录文本；
-   - **降级路径（无 bilibili MCP 时）**：若当前环境未配置 bilibili MCP，Agent 自动提示用户提供 1~2 个相关 B 站/视频 URL，或使用内置 Web 搜索锁定信源；
-   - 通过 `extract.py <url> --chunk-index` 或 `get_video_transcript` 查看技术指纹，仅对命中 `must_cover` 考点的章节提取 L1.5 证据。
-3. **横向综合重构 (Learning Launchpad)**：
-   - 提取 Teaching Anchor 候选，执行 Q1/Q2/Q3 淘汰并产出 `anchor_audit.json`；
-   - 遵循六段式 Learning Launchpad 结构编写综合主题笔记。
-4. **归档闭环**：执行 `wikify.py all --vault <vault>` 注入与 `validate_note.py --vault <vault> --archive <archive>` 质量门禁，确保满分入库。

@@ -66,6 +66,11 @@
           "kind": {
             "type": "string",
             "enum": ["insight", "warning", "analogy", "attitude", "punchline"]
+          },
+          "anchor_type": {
+            "type": "string",
+            "enum": ["verbatim", "grounded_rewrite"],
+            "default": "grounded_rewrite"
           }
         },
         "allOf": [
