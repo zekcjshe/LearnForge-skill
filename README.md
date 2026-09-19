@@ -58,7 +58,7 @@
 │  LearnForge 认知重构：                                       │
 │  Learning Goal / Video                                      │
 │        ↓                                                    │
-│     Evidence (音视频精准证据)                                │
+│     Evidence (字幕与语音证据)                                │
 │        ↓                                                    │
 │  Learning Plan (认知阶梯与考点规划)                          │
 │        ↓                                                    │
@@ -66,7 +66,7 @@
 │        ↓                                                    │
 │  Active Recall + Action (闭环自测 + 动手验证任务)            │
 │        ↓                                                    │
-│  Deterministic Quality Gate (100% 拒绝幻觉的确定性门禁)      │
+│  Deterministic Quality Gate (对引用/来源/链接执行确定性校验)  │
 └─────────────────────────────────────────────────────────────┘
 ```
 

@@ -160,10 +160,15 @@ class TestAnchorProvenance(unittest.TestCase):
             make_note([("整条马路都堵死了，收费站必须限流", "03:10 - 03:24", "UP主")]), ARCHIVE)
         self.assertEqual(r["blocking"], [], "补标点被误判成编造 —— ASR 原文本来就没标点")
 
-    def test_rewritten_wording_is_blocked(self):
+    def test_wild_rewrite_below_threshold_is_blocked(self):
+        r = validate_note.check_anchors(
+            make_note([("遇到大塞车以后整条马路都需要各级交警介入进行深度管制", "03:10 - 03:24", "UP主")]), ARCHIVE)
+        self.assertTrue(any("不在原始 transcript" in e for e in r["blocking"]), r["blocking"])
+
+    def test_grounded_rewrite_within_threshold_passes(self):
         r = validate_note.check_anchors(
             make_note([("整条马路都堵死了，收费站必须限制车流", "03:10 - 03:24", "UP主")]), ARCHIVE)
-        self.assertTrue(any("不在原始 transcript" in e for e in r["blocking"]), r["blocking"])
+        self.assertEqual(r["blocking"], [])
 
     def test_fabricated_quote_is_blocked(self):
         r = validate_note.check_anchors(
