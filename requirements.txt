@@ -1,4 +1,4 @@
-# Python dependencies for video2obsidian (VideoLearner)
+# Python dependencies for LearnForge / video2obsidian
 faster-whisper>=1.0.0
 yt-dlp>=2024.0.0
 requests>=2.28.0
